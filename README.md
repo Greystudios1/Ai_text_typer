@@ -16,6 +16,7 @@ This project provides a simple desktop GUI that types pasted text into the curre
   - warmup effect and fatigue drift
 - Start/Stop controls with status display.
 - `PyInstaller` build script for Windows `.exe` packaging.
+- Automatic Desktop shortcut creation (`HumanTyper.lnk`) after a successful build.
 
 ## Run locally
 
@@ -32,11 +33,13 @@ python human_typer_gui.py
 build_exe.bat
 ```
 
-The batch file now:
+The batch file:
 
 - switches to the script directory automatically (so `requirements.txt` is always found)
 - picks `py -3` when available, otherwise falls back to `python`
 - stops on install/build errors (no false "Build complete" message on failure)
+- creates Desktop shortcut: `%USERPROFILE%\Desktop\HumanTyper.lnk`
+- keeps the command window open with `pause` for debugging on both success and failure
 
 ### Manual build
 
@@ -68,4 +71,5 @@ Output binary:
 
 - **`Could not open requirements file`**: run `build_exe.bat` from this repository and keep `requirements.txt` in the same folder.
 - **`No module named PyInstaller`**: run `python -m pip install -r requirements.txt` first, then rerun `build_exe.bat`.
+- **Shortcut creation failed**: ensure PowerShell is available and not blocked by local policy.
 - If your machine has multiple Python installs, use explicit versioned commands (example: `py -3.12 -m pip install -r requirements.txt`).

@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 
-REM Ensure script runs relative to its own folder (fixes missing requirements.txt when launched elsewhere)
+REM Ensure script runs relative to its own folder
 cd /d "%~dp0"
 
 set "PYTHON_CMD="
@@ -12,23 +12,37 @@ if %ERRORLEVEL%==0 (
     set "PYTHON_CMD=python"
 )
 
-echo [1/3] Installing dependencies from requirements.txt...
+echo [1/4] Installing dependencies from requirements.txt...
 %PYTHON_CMD% -m pip install -r requirements.txt
 if errorlevel 1 goto :fail
 
-echo [2/3] Building executable with PyInstaller...
+echo [2/4] Building executable with PyInstaller...
 %PYTHON_CMD% -m PyInstaller --noconfirm --onefile --windowed --name HumanTyper human_typer_gui.py
 if errorlevel 1 goto :fail
 
-echo [3/3] Done.
-if exist "dist\HumanTyper.exe" (
-    echo Build complete. EXE is in dist\HumanTyper.exe
-    exit /b 0
+if not exist "dist\HumanTyper.exe" (
+    echo Build command finished but dist\HumanTyper.exe was not found.
+    goto :fail
 )
 
-echo Build command finished but dist\HumanTyper.exe was not found.
-exit /b 1
+echo [3/4] Creating Desktop shortcut...
+set "SHORTCUT_TARGET=%~dp0dist\HumanTyper.exe"
+set "SHORTCUT_PATH=%USERPROFILE%\Desktop\HumanTyper.lnk"
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell; $s=$ws.CreateShortcut('%SHORTCUT_PATH%'); $s.TargetPath='%SHORTCUT_TARGET%'; $s.WorkingDirectory='%~dp0dist'; $s.IconLocation='%SHORTCUT_TARGET%,0'; $s.Save()"
+if errorlevel 1 goto :fail
+
+echo [4/4] Done.
+echo Build complete. EXE is in dist\HumanTyper.exe
+echo Desktop shortcut created: %SHORTCUT_PATH%
+echo.
+echo Debug window intentionally left open.
+pause
+exit /b 0
 
 :fail
-echo Build failed. Please review the error output above.
+echo.
+echo Build/install failed. Please review the error output above.
+echo Debug window intentionally left open.
+pause
 exit /b 1
