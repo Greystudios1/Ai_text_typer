@@ -26,13 +26,19 @@ python human_typer_gui.py
 
 ## Build Windows EXE
 
-On Windows:
+### Recommended (double-click or run in cmd)
 
 ```bat
 build_exe.bat
 ```
 
-Or manually:
+The batch file now:
+
+- switches to the script directory automatically (so `requirements.txt` is always found)
+- picks `py -3` when available, otherwise falls back to `python`
+- stops on install/build errors (no false "Build complete" message on failure)
+
+### Manual build
 
 ```bat
 python -m pip install -r requirements.txt
@@ -57,3 +63,9 @@ Output binary:
 
 - `PyAutoGUI` fail-safe is enabled: moving mouse to the top-left corner can raise a fail-safe exception.
 - Test in a safe text editor first before using in important applications.
+
+## Troubleshooting (Windows)
+
+- **`Could not open requirements file`**: run `build_exe.bat` from this repository and keep `requirements.txt` in the same folder.
+- **`No module named PyInstaller`**: run `python -m pip install -r requirements.txt` first, then rerun `build_exe.bat`.
+- If your machine has multiple Python installs, use explicit versioned commands (example: `py -3.12 -m pip install -r requirements.txt`).
