@@ -821,10 +821,11 @@ class App:
         def worker():
             try:
                 out = subprocess.check_output(["git", "pull", "--ff-only"], stderr=subprocess.STDOUT, text=True)
-                self._ui(lambda: self.status.set("Update complete. Restart app if files changed."))
-                self._ui(lambda: self.log_box.insert("end", f"[update]\n{out}\n"))
+                self._ui(lambda out_text=out: self.status.set("Update complete. Restart app manually if files changed."))
+                self._ui(lambda out_text=out: self.log_box.insert("end", f"[update]\n{out_text}\n"))
             except Exception as exc:
-                self._ui(lambda: self.status.set(f"Update failed: {exc}"))
+                self._ui(lambda err=str(exc): self.status.set(f"Update failed: {err}"))
+                self._ui(lambda err=str(exc): self.log_box.insert("end", f"[update-error] {err}\n"))
 
         threading.Thread(target=worker, daemon=True).start()
 

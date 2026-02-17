@@ -48,6 +48,7 @@ v2 includes a translation layer for uppercase and shift-modified symbols (`: ? {
 
 ### In-app update helper
 - **Update from Git** button runs `git pull --ff-only` and reports output in the log panel.
+- Update is non-destructive for debugging: it does **not** auto-close the app/window; restart is manual when desired.
 
 ## Run locally
 
