@@ -64,6 +64,21 @@ This repo tracks source files only. Generated/binary artifacts are intentionally
 
 Generate these locally by running `build_exe.bat`. This avoids PR/branch tooling failures like **"Binary files are not supported"** when updating branches.
 
+
+### Safe git update helper
+
+If your automation currently runs `git pull --ff-only` and fails with:
+
+- `[update-error] Command ['git', 'pull', '--ff-only'] returned non-zero exit status 128.`
+
+use the included wrapper instead:
+
+```bash
+python safe_git_update.py
+```
+
+The wrapper avoids hard-failing on common local setup issues (no remote configured, no upstream tracking branch, detached HEAD) and prints clear status messages (`[update-ok]`, `[update-skip]`, `[update-error]`).
+
 ## Usage
 
 1. Launch the app.
