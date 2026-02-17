@@ -1,8 +1,13 @@
 # Human-ish Text Typer (Windows GUI)
 
-This project provides a simple desktop GUI that types pasted text into the currently focused input field with configurable timing variability.
+This project provides desktop GUIs that type pasted text into the currently focused input field with configurable timing variability.
 
 > Use this for legitimate automation tasks (demo scripting, accessibility assistance, QA/testing, repetitive data-entry workflows).
+
+## Versions
+
+- **Base app**: `human_typer_gui.py` (plain text typing)
+- **v2 app**: `human_typer_gui_v2.py` (formatted text support)
 
 ## Features
 
@@ -16,13 +21,31 @@ This project provides a simple desktop GUI that types pasted text into the curre
   - warmup effect and fatigue drift
 - Start/Stop controls with status display.
 - `PyInstaller` build script for Windows `.exe` packaging.
-- Automatic Desktop shortcut creation (`HumanTyper.lnk`) after a successful build.
+- Automatic Desktop shortcut creation after a successful build.
+
+### v2 formatting support
+
+`human_typer_gui_v2.py` accepts lightweight markdown-style formatting:
+
+- `**bold**`
+- `*italic*` or `_italic_`
+- Bullet lines beginning with `- ` or `* `
+- Line breaks
+
+It can optionally use rich-text shortcuts while typing:
+
+- Bold: `Ctrl+B`
+- Italic: `Ctrl+I`
+- Bullet list: `Ctrl+Shift+8`
+
+If rich shortcuts are disabled, bullets are typed as plain `- `.
 
 ## Run locally
 
 ```bash
 python -m pip install -r requirements.txt
 python human_typer_gui.py
+python human_typer_gui_v2.py
 ```
 
 ## Build Windows EXE
@@ -37,8 +60,13 @@ The batch file:
 
 - switches to the script directory automatically (so `requirements.txt` is always found)
 - picks `py -3` when available, otherwise falls back to `python`
-- stops on install/build errors (no false "Build complete" message on failure)
-- creates Desktop shortcut: `%USERPROFILE%\Desktop\HumanTyper.lnk`
+- detects available app sources and builds whichever exists:
+  - `human_typer_gui.py` -> `dist\HumanTyper.exe`
+  - `human_typer_gui_v2.py` -> `dist\HumanTyper_v2.exe`
+- stops on install/build errors (no false success message on failure)
+- creates matching Desktop shortcuts when builds succeed:
+  - `%USERPROFILE%\Desktop\HumanTyper.lnk`
+  - `%USERPROFILE%\Desktop\HumanTyper_v2.lnk`
 - keeps the command window open with `pause` for debugging on both success and failure
 
 ### Manual build
@@ -46,16 +74,13 @@ The batch file:
 ```bat
 python -m pip install -r requirements.txt
 python -m PyInstaller --noconfirm --onefile --windowed --name HumanTyper human_typer_gui.py
+python -m PyInstaller --noconfirm --onefile --windowed --name HumanTyper_v2 human_typer_gui_v2.py
 ```
-
-Output binary:
-
-- `dist/HumanTyper.exe`
 
 ## Usage
 
-1. Launch the app.
-2. Paste the text in the large text box.
+1. Launch either app.
+2. Paste the text in the text box.
 3. Tune the sliders for the typing profile you want.
 4. Set start delay (seconds).
 5. Click **Start Typing**.
