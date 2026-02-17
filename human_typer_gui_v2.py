@@ -415,7 +415,8 @@ class App:
         self.seed_entry.pack(side="left", padx=(6, 8))
         ttk.Button(seed_frame, text="Randomize seed", command=self.randomize_seed).pack(side="left")
         ttk.Label(seed_frame, text="Preset").pack(side="left", padx=(14, 4))
-        ttk.Combobox(seed_frame, values=list(PRESETS.keys()), textvariable=self.preset_var, width=12, state="readonly").pack(side="left")
+        self.preset_combo = ttk.Combobox(seed_frame, values=list(PRESETS.keys()), textvariable=self.preset_var, width=12, state="readonly")
+        self.preset_combo.pack(side="left")
         ttk.Button(seed_frame, text="Apply preset", command=self.apply_preset).pack(side="left", padx=(6, 0))
         ttk.Button(seed_frame, text="Save profile", command=self.save_profile).pack(side="left", padx=(12, 0))
         ttk.Button(seed_frame, text="Load profile", command=self.load_profile).pack(side="left", padx=(6, 0))
@@ -424,7 +425,8 @@ class App:
         run_frame.grid(row=15, column=0, columnspan=5, sticky="ew", pady=(8, 0))
         self.countdown_var = tk.IntVar(value=4)
         ttk.Label(run_frame, text="Start delay (seconds)").pack(side="left")
-        ttk.Spinbox(run_frame, from_=0, to=20, textvariable=self.countdown_var, width=6).pack(side="left", padx=(6, 12))
+        self.countdown_spin = ttk.Spinbox(run_frame, from_=0, to=20, textvariable=self.countdown_var, width=6)
+        self.countdown_spin.pack(side="left", padx=(6, 12))
         self.start_btn = ttk.Button(run_frame, text="Start (F8)", command=self.start)
         self.start_btn.pack(side="left")
         self.pause_btn = ttk.Button(run_frame, text="Pause (F9)", command=self.pause_resume, state="disabled")
@@ -474,25 +476,49 @@ class App:
             fg = "#f2f2f2"
             panel = "#2a2a2a"
             entry_bg = "#151515"
-            entry_fg = "#f2f2f2"
+            entry_fg = "#ffffff"
+            disabled_fg = "#cfcfcf"
         else:
             bg = "#f2f2f2"
             fg = "#111111"
             panel = "#ffffff"
             entry_bg = "#ffffff"
             entry_fg = "#111111"
+            disabled_fg = "#666666"
 
         self.root.configure(bg=bg)
         style.configure("TFrame", background=bg)
         style.configure("TLabel", background=bg, foreground=fg)
         style.configure("TCheckbutton", background=bg, foreground=fg)
         style.configure("TButton", background=panel, foreground=fg)
-        style.configure("TCombobox", fieldbackground=panel, foreground=fg)
-        style.configure("TEntry", fieldbackground=panel, foreground=fg)
+
+        style.configure("Readable.TEntry", fieldbackground=entry_bg, foreground=entry_fg)
+        style.map("Readable.TEntry", foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)])
+
+        style.configure("Readable.TCombobox", fieldbackground=entry_bg, foreground=entry_fg, background=panel)
+        style.map(
+            "Readable.TCombobox",
+            fieldbackground=[("readonly", entry_bg), ("!readonly", entry_bg)],
+            foreground=[("readonly", entry_fg), ("disabled", disabled_fg), ("!disabled", entry_fg)],
+            selectforeground=[("readonly", entry_fg)],
+        )
+
+        style.configure("Readable.TSpinbox", fieldbackground=entry_bg, foreground=entry_fg)
+        style.map("Readable.TSpinbox", foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)])
         style.map("TButton", background=[("active", panel)])
 
+        self.seed_entry.configure(style="Readable.TEntry")
+        self.preset_combo.configure(style="Readable.TCombobox")
+        self.countdown_spin.configure(style="Readable.TSpinbox")
+
         for widget in (self.text_input, self.log_box):
-            widget.configure(bg=entry_bg, fg=entry_fg, insertbackground=entry_fg)
+            widget.configure(
+                bg=entry_bg,
+                fg=entry_fg,
+                insertbackground=entry_fg,
+                selectbackground="#3b82f6" if mode == "dark" else "#9ec5fe",
+                selectforeground="#ffffff" if mode == "dark" else "#111111",
+            )
 
         self.current_theme = mode
 
