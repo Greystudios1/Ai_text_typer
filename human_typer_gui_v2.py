@@ -400,7 +400,7 @@ class App:
             r = 4 + i
             ttk.Label(frm, text=label).grid(row=r, column=0, sticky="w")
             var = tk.DoubleVar(value=dv)
-            ttk.Scale(frm, from_=mn, to=mx, variable=var).grid(row=r, column=1, columnspan=2, sticky="ew", padx=(8, 8))
+            ttk.Scale(frm, from_=mn, to=mx, variable=var, style="Themed.Horizontal.TScale").grid(row=r, column=1, columnspan=2, sticky="ew", padx=(8, 8))
             ttk.Label(frm, textvariable=var, width=8).grid(row=r, column=3, sticky="e")
             self.scale_vars[label] = var
 
@@ -505,6 +505,12 @@ class App:
 
         style.configure("Readable.TSpinbox", fieldbackground=entry_bg, foreground=entry_fg)
         style.map("Readable.TSpinbox", foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)])
+
+        scale_trough = "#2f2f2f" if mode == "dark" else "#d9d9d9"
+        scale_bg = bg
+        style.configure("Themed.Horizontal.TScale", background=scale_bg, troughcolor=scale_trough)
+        style.map("Themed.Horizontal.TScale", background=[("active", scale_bg)])
+
         style.map("TButton", background=[("active", panel)])
 
         self.seed_entry.configure(style="Readable.TEntry")
