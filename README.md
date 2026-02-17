@@ -63,8 +63,9 @@ The batch file:
 - detects available app sources and builds whichever exists:
   - `human_typer_gui.py` -> `dist\HumanTyper.exe`
   - `human_typer_gui_v2.py` -> `dist\HumanTyper_v2.exe`
-- stops on install/build errors (no false success message on failure)
-- creates matching Desktop shortcuts when builds succeed:
+- if one target fails (for example an EXE is locked), it still builds the other target when possible
+- fails only when no target was built successfully
+- creates matching Desktop shortcuts only for successful builds:
   - `%USERPROFILE%\Desktop\HumanTyper.lnk`
   - `%USERPROFILE%\Desktop\HumanTyper_v2.lnk`
 - keeps the command window open with `pause` for debugging on both success and failure
