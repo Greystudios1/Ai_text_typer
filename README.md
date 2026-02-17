@@ -52,6 +52,16 @@ Output binary:
 
 - `dist/HumanTyper.exe`
 
+
+## Repository policy (to avoid branch update errors)
+
+This repo tracks source files only. Generated/binary artifacts are intentionally not committed:
+
+- `dist/`, `build/`, `*.spec`
+- `*.ico`, `*.zip`, `*.lnk`
+
+Generate these locally by running `build_exe.bat`. This avoids PR/branch tooling failures like **"Binary files are not supported"** when updating branches.
+
 ## Usage
 
 1. Launch the app.

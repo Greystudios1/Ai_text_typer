@@ -1,0 +1,19 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local virtualenvs
+.venv/
+venv/
+
+# Build outputs (generated locally)
+build/
+dist/
+*.spec
+
+# Generated packaging artifacts
+*.zip
+*.ico
+
+# Windows shortcut artifacts
+*.lnk
