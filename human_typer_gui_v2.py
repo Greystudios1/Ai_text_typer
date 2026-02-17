@@ -1,6 +1,8 @@
 import json
 import random
+import re
 import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
@@ -45,6 +47,59 @@ SHIFT_CHAR_MAP = {
     "_": "-", "+": "=", "{": "[", "}": "]", "|": "\\", ":": ";", '"': "'", "<": ",", ">": ".", "?": "/",
 }
 
+
+
+THEME_COLOR_FIELDS = [
+    ("bg", "Window bg"),
+    ("fg", "Text fg"),
+    ("panel", "Panel bg"),
+    ("entry_bg", "Input bg"),
+    ("entry_fg", "Input fg"),
+    ("border", "Border"),
+    ("button_bg", "Button bg"),
+    ("button_active_bg", "Button active bg"),
+    ("button_disabled_bg", "Button disabled bg"),
+    ("disabled_fg", "Disabled input fg"),
+    ("disabled_btn_fg", "Disabled button fg"),
+    ("scale_trough", "Scale trough"),
+    ("select_bg", "Selection bg"),
+    ("select_fg", "Selection fg"),
+]
+
+DEFAULT_THEME_PALETTES = {
+    "dark": {
+        "bg": "#1e1e1e",
+        "fg": "#f2f2f2",
+        "panel": "#2a2a2a",
+        "entry_bg": "#151515",
+        "entry_fg": "#ffffff",
+        "border": "#3a3a3a",
+        "button_bg": "#343434",
+        "button_active_bg": "#3f3f3f",
+        "button_disabled_bg": "#2b2b2b",
+        "disabled_fg": "#cfcfcf",
+        "disabled_btn_fg": "#9a9a9a",
+        "scale_trough": "#2f2f2f",
+        "select_bg": "#3b82f6",
+        "select_fg": "#ffffff",
+    },
+    "light": {
+        "bg": "#f2f2f2",
+        "fg": "#111111",
+        "panel": "#ffffff",
+        "entry_bg": "#ffffff",
+        "entry_fg": "#111111",
+        "border": "#bcbcbc",
+        "button_bg": "#ffffff",
+        "button_active_bg": "#f4f4f4",
+        "button_disabled_bg": "#ececec",
+        "disabled_fg": "#666666",
+        "disabled_btn_fg": "#7a7a7a",
+        "scale_trough": "#d9d9d9",
+        "select_bg": "#9ec5fe",
+        "select_fg": "#111111",
+    },
+}
 
 @dataclass
 class TyperConfig:
@@ -350,6 +405,9 @@ class App:
         self.global_hotkey_listener = None
         self.total_chars = 0
         self.current_theme = "dark"
+        self._last_update_log = None
+        self.theme_palettes = {mode: values.copy() for mode, values in DEFAULT_THEME_PALETTES.items()}
+        self.theme_color_vars = {key: tk.StringVar(value=self.theme_palettes[self.current_theme][key]) for key, _ in THEME_COLOR_FIELDS}
 
         self._build_ui()
         self._apply_theme("dark")
@@ -450,9 +508,21 @@ class App:
         self.log_box = tk.Text(frm, height=9, wrap="none")
         self.log_box.grid(row=21, column=0, columnspan=5, sticky="nsew", pady=(8, 0))
 
+        self.theme_editor_frame = ttk.LabelFrame(frm, text="Power user theme colors (hex)")
+        self.theme_editor_frame.grid(row=22, column=0, columnspan=5, sticky="ew", pady=(8, 0))
+        for idx, (key, label) in enumerate(THEME_COLOR_FIELDS):
+            row = idx // 4
+            col = (idx % 4) * 2
+            ttk.Label(self.theme_editor_frame, text=label).grid(row=row, column=col, sticky="w", padx=(0, 4), pady=2)
+            ttk.Entry(self.theme_editor_frame, width=10, textvariable=self.theme_color_vars[key]).grid(row=row, column=col + 1, sticky="w", padx=(0, 10), pady=2)
+
+        action_row = (len(THEME_COLOR_FIELDS) - 1) // 4 + 1
+        ttk.Button(self.theme_editor_frame, text="Apply theme colors", command=self.apply_power_user_colors).grid(row=action_row, column=0, columnspan=2, sticky="w", pady=(4, 2))
+        ttk.Button(self.theme_editor_frame, text="Reset mode colors", command=self.reset_power_user_colors).grid(row=action_row, column=2, columnspan=2, sticky="w", pady=(4, 2))
+
         self.debug_var = tk.StringVar(value="Debug: disabled")
         self.debug_label = ttk.Label(frm, textvariable=self.debug_var)
-        self.debug_label.grid(row=22, column=0, columnspan=5, sticky="w", pady=(6, 0))
+        self.debug_label.grid(row=23, column=0, columnspan=5, sticky="w", pady=(6, 0))
         self.toggle_power_user_mode()
 
         frm.columnconfigure(2, weight=1)
@@ -469,54 +539,136 @@ class App:
         self.root.bind("<F9>", lambda _e: self.pause_resume())
         self.root.bind("<F10>", lambda _e: self.stop())
 
+    def _valid_hex_color(self, value: str) -> bool:
+        return bool(re.fullmatch(r"#[0-9a-fA-F]{6}", value.strip()))
+
+    def _load_palette_into_inputs(self, mode: str):
+        palette = self.theme_palettes[mode]
+        for key, _ in THEME_COLOR_FIELDS:
+            self.theme_color_vars[key].set(palette[key])
+
+    def _read_palette_from_inputs(self):
+        palette = {}
+        for key, _ in THEME_COLOR_FIELDS:
+            value = self.theme_color_vars[key].get().strip()
+            if not self._valid_hex_color(value):
+                raise ValueError(f"Invalid hex for '{key}': {value}. Use #RRGGBB")
+            palette[key] = value.lower()
+        return palette
+
+    def apply_power_user_colors(self):
+        try:
+            self.theme_palettes[self.current_theme] = self._read_palette_from_inputs()
+        except ValueError as exc:
+            messagebox.showerror("Invalid color", str(exc))
+            self.status.set(f"Theme update failed: {exc}")
+            return
+
+        self._apply_theme(self.current_theme)
+        self.status.set(f"Applied custom {self.current_theme} palette.")
+        self._refresh_debug_panel()
+
+    def reset_power_user_colors(self):
+        self.theme_palettes[self.current_theme] = DEFAULT_THEME_PALETTES[self.current_theme].copy()
+        self._load_palette_into_inputs(self.current_theme)
+        self._apply_theme(self.current_theme)
+        self.status.set(f"Reset {self.current_theme} palette to defaults.")
+        self._refresh_debug_panel()
+
     def _apply_theme(self, mode: str):
         style = ttk.Style(self.root)
-        if mode == "dark":
-            bg = "#1e1e1e"
-            fg = "#f2f2f2"
-            panel = "#2a2a2a"
-            entry_bg = "#151515"
-            entry_fg = "#ffffff"
-            disabled_fg = "#cfcfcf"
-            disabled_btn_fg = "#7a7a7a"
-        else:
-            bg = "#f2f2f2"
-            fg = "#111111"
-            panel = "#ffffff"
-            entry_bg = "#ffffff"
-            entry_fg = "#111111"
-            disabled_fg = "#666666"
-            disabled_btn_fg = "#666666"
+        if "clam" in style.theme_names() and style.theme_use() != "clam":
+            style.theme_use("clam")
+
+        palette = self.theme_palettes[mode]
+        bg = palette["bg"]
+        fg = palette["fg"]
+        panel = palette["panel"]
+        entry_bg = palette["entry_bg"]
+        entry_fg = palette["entry_fg"]
+        border = palette["border"]
+        button_bg = palette["button_bg"]
+        button_active_bg = palette["button_active_bg"]
+        button_disabled_bg = palette["button_disabled_bg"]
+        disabled_fg = palette["disabled_fg"]
+        disabled_btn_fg = palette["disabled_btn_fg"]
+        scale_trough = palette["scale_trough"]
+        select_bg = palette["select_bg"]
+        select_fg = palette["select_fg"]
 
         self.root.configure(bg=bg)
         style.configure("TFrame", background=bg)
+        style.configure("TLabelframe", background=bg, foreground=fg, bordercolor=border)
+        style.configure("TLabelframe.Label", background=bg, foreground=fg)
         style.configure("TLabel", background=bg, foreground=fg)
         style.configure("TCheckbutton", background=bg, foreground=fg)
-        style.configure("TButton", background=panel, foreground=fg, borderwidth=1)
 
-        style.configure("Readable.TEntry", fieldbackground=entry_bg, foreground=entry_fg)
-        style.map("Readable.TEntry", foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)])
-
-        style.configure("Readable.TCombobox", fieldbackground=entry_bg, foreground=entry_fg, background=panel)
-        style.map(
-            "Readable.TCombobox",
-            fieldbackground=[("readonly", entry_bg), ("!readonly", entry_bg)],
-            foreground=[("readonly", entry_fg), ("disabled", disabled_fg), ("!disabled", entry_fg)],
-            selectforeground=[("readonly", entry_fg)],
+        style.configure(
+            "TButton",
+            background=button_bg,
+            foreground=fg,
+            bordercolor=border,
+            darkcolor=button_bg,
+            lightcolor=button_bg,
+            relief="flat",
+            borderwidth=1,
+            focusthickness=1,
+            focuscolor=border,
+            padding=(8, 4),
         )
 
-        style.configure("Readable.TSpinbox", fieldbackground=entry_bg, foreground=entry_fg)
-        style.map("Readable.TSpinbox", foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)])
+        style.configure(
+            "Readable.TEntry",
+            fieldbackground=entry_bg,
+            foreground=entry_fg,
+            bordercolor=border,
+            insertcolor=entry_fg,
+        )
+        style.map(
+            "Readable.TEntry",
+            foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)],
+            fieldbackground=[("disabled", panel), ("!disabled", entry_bg)],
+        )
 
-        scale_trough = "#2f2f2f" if mode == "dark" else "#d9d9d9"
-        scale_bg = bg
-        style.configure("Themed.Horizontal.TScale", background=scale_bg, troughcolor=scale_trough)
-        style.map("Themed.Horizontal.TScale", background=[("active", scale_bg)])
+        style.configure(
+            "Readable.TCombobox",
+            fieldbackground=entry_bg,
+            foreground=entry_fg,
+            background=panel,
+            bordercolor=border,
+            arrowcolor=entry_fg,
+        )
+        style.map(
+            "Readable.TCombobox",
+            fieldbackground=[("readonly", entry_bg), ("disabled", panel), ("!readonly", entry_bg)],
+            foreground=[("readonly", entry_fg), ("disabled", disabled_fg), ("!disabled", entry_fg)],
+            selectforeground=[("readonly", entry_fg)],
+            arrowcolor=[("disabled", disabled_fg), ("!disabled", entry_fg)],
+        )
+
+        style.configure(
+            "Readable.TSpinbox",
+            fieldbackground=entry_bg,
+            foreground=entry_fg,
+            background=panel,
+            bordercolor=border,
+            arrowcolor=entry_fg,
+        )
+        style.map(
+            "Readable.TSpinbox",
+            foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)],
+            fieldbackground=[("disabled", panel), ("!disabled", entry_bg)],
+            arrowcolor=[("disabled", disabled_fg), ("!disabled", entry_fg)],
+        )
+
+        style.configure("Themed.Horizontal.TScale", background=bg, troughcolor=scale_trough)
+        style.map("Themed.Horizontal.TScale", background=[("active", bg)])
 
         style.map(
             "TButton",
-            background=[("active", panel), ("disabled", panel)],
+            background=[("active", button_active_bg), ("disabled", button_disabled_bg), ("!disabled", button_bg)],
             foreground=[("disabled", disabled_btn_fg), ("!disabled", fg)],
+            bordercolor=[("disabled", border), ("!disabled", border)],
         )
 
         self.seed_entry.configure(style="Readable.TEntry")
@@ -528,11 +680,12 @@ class App:
                 bg=entry_bg,
                 fg=entry_fg,
                 insertbackground=entry_fg,
-                selectbackground="#3b82f6" if mode == "dark" else "#9ec5fe",
-                selectforeground="#ffffff" if mode == "dark" else "#111111",
+                selectbackground=select_bg,
+                selectforeground=select_fg,
             )
 
         self.current_theme = mode
+        self._load_palette_into_inputs(mode)
 
     def toggle_dark_mode(self):
         self._apply_theme("dark" if self.dark_mode_var.get() else "light")
@@ -542,10 +695,12 @@ class App:
         enabled = self.power_user_var.get()
         if enabled:
             self.log_box.grid()
+            self.theme_editor_frame.grid()
             self.debug_label.grid()
             self.debug_var.set("Debug: power user mode enabled")
         else:
             self.log_box.grid_remove()
+            self.theme_editor_frame.grid_remove()
             self.debug_label.grid_remove()
             self.debug_var.set("Debug: disabled")
 
@@ -599,8 +754,9 @@ class App:
     def _refresh_debug_panel(self):
         if not self.power_user_var.get():
             return
+        sample = self.theme_palettes[self.current_theme]["bg"]
         self.debug_var.set(
-            f"Debug: theme={self.current_theme} | use_seed={self.use_seed_var.get()} | seed={self.seed_var.get() or '(auto)'} | dry_run={self.dry_run_var.get()} | event_log={self.log_events_var.get()} | guard_window={self.guard_window_var.get()}"
+            f"Debug: theme={self.current_theme} | bg={sample} | use_seed={self.use_seed_var.get()} | seed={self.seed_var.get() or '(auto)'} | dry_run={self.dry_run_var.get()} | event_log={self.log_events_var.get()} | guard_window={self.guard_window_var.get()}"
         )
 
     def _on_use_seed_toggle(self):
@@ -829,15 +985,66 @@ class App:
         self.status.set("Stopping...")
         self._refresh_debug_panel()
 
+
+    def _append_update_log(self, kind: str, message: str):
+        normalized = (kind, message.strip())
+        if self._last_update_log == normalized:
+            return
+        self._last_update_log = normalized
+        self.log_box.insert("end", f"[{kind}]\n{message}\n")
+        self.log_box.see("end")
+
+    def _resolve_git_repo(self):
+        candidates = [Path(__file__).resolve().parent, Path.cwd()]
+        exe_path = getattr(sys, "executable", "")
+        if exe_path:
+            candidates.append(Path(exe_path).resolve().parent)
+
+        seen = set()
+        for candidate in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            probe = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=candidate,
+                capture_output=True,
+                text=True,
+            )
+            if probe.returncode == 0:
+                return Path(probe.stdout.strip())
+        return None
+
     def update_from_git(self):
         def worker():
+            repo_dir = self._resolve_git_repo()
+            if repo_dir is None:
+                msg = "Update unavailable: this copy is not inside a Git repository. Use a cloned repo checkout to update from Git."
+                self._ui(lambda text=msg: self.status.set(text))
+                self._ui(lambda text=msg: self._append_update_log("update-error", text))
+                return
+
             try:
-                out = subprocess.check_output(["git", "pull", "--ff-only"], stderr=subprocess.STDOUT, text=True)
+                result = subprocess.run(
+                    ["git", "pull", "--ff-only"],
+                    cwd=repo_dir,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                out = (result.stdout or "").strip()
+                if result.stderr:
+                    out = f"{out}\n{result.stderr.strip()}".strip()
                 self._ui(lambda out_text=out: self.status.set("Update complete. Restart app manually if files changed."))
-                self._ui(lambda out_text=out: self.log_box.insert("end", f"[update]\n{out_text}\n"))
+                self._ui(lambda out_text=out: self._append_update_log("update", out_text))
+            except subprocess.CalledProcessError as exc:
+                err_out = "\n".join(part.strip() for part in [exc.stdout or "", exc.stderr or ""] if part.strip())
+                err_msg = err_out or str(exc)
+                self._ui(lambda err=err_msg: self.status.set(f"Update failed: {err}"))
+                self._ui(lambda err=err_msg: self._append_update_log("update-error", err))
             except Exception as exc:
                 self._ui(lambda err=str(exc): self.status.set(f"Update failed: {err}"))
-                self._ui(lambda err=str(exc): self.log_box.insert("end", f"[update-error] {err}\n"))
+                self._ui(lambda err=str(exc): self._append_update_log("update-error", err))
 
         threading.Thread(target=worker, daemon=True).start()
 
