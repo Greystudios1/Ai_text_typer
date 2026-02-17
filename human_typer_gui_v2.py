@@ -478,6 +478,7 @@ class App:
             entry_bg = "#151515"
             entry_fg = "#ffffff"
             disabled_fg = "#cfcfcf"
+            disabled_btn_fg = "#7a7a7a"
         else:
             bg = "#f2f2f2"
             fg = "#111111"
@@ -485,12 +486,13 @@ class App:
             entry_bg = "#ffffff"
             entry_fg = "#111111"
             disabled_fg = "#666666"
+            disabled_btn_fg = "#666666"
 
         self.root.configure(bg=bg)
         style.configure("TFrame", background=bg)
         style.configure("TLabel", background=bg, foreground=fg)
         style.configure("TCheckbutton", background=bg, foreground=fg)
-        style.configure("TButton", background=panel, foreground=fg)
+        style.configure("TButton", background=panel, foreground=fg, borderwidth=1)
 
         style.configure("Readable.TEntry", fieldbackground=entry_bg, foreground=entry_fg)
         style.map("Readable.TEntry", foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)])
@@ -511,7 +513,11 @@ class App:
         style.configure("Themed.Horizontal.TScale", background=scale_bg, troughcolor=scale_trough)
         style.map("Themed.Horizontal.TScale", background=[("active", scale_bg)])
 
-        style.map("TButton", background=[("active", panel)])
+        style.map(
+            "TButton",
+            background=[("active", panel), ("disabled", panel)],
+            foreground=[("disabled", disabled_btn_fg), ("!disabled", fg)],
+        )
 
         self.seed_entry.configure(style="Readable.TEntry")
         self.preset_combo.configure(style="Readable.TCombobox")
