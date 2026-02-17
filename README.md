@@ -8,7 +8,7 @@ This project provides a simple desktop GUI that types pasted text into the curre
 
 - Paste text and send it to any active input field after a countdown.
 - Adjustable typing profile controls:
-  - base WPM
+  - base WPM slider (10–160) plus manual Base WPM entry (any positive value)
   - per-keystroke timing variation
   - burst length (min/max chars)
   - micro pauses and longer thinking pauses
@@ -17,6 +17,8 @@ This project provides a simple desktop GUI that types pasted text into the curre
 - Start/Stop controls with status display.
 - `PyInstaller` build script for Windows `.exe` packaging.
 - Automatic Desktop shortcut creation (`HumanTyper.lnk`) after a successful build.
+- Dark mode toggle (enabled by default).
+- View menu toggles for Advanced mode controls and Debug panel.
 
 ## Run locally
 
@@ -52,15 +54,27 @@ Output binary:
 
 - `dist/HumanTyper.exe`
 
+
+## Repository policy (to avoid branch update errors)
+
+This repo tracks source files only. Generated/binary artifacts are intentionally not committed:
+
+- `dist/`, `build/`, `*.spec`
+- `*.ico`, `*.zip`, `*.lnk`
+
+Generate these locally by running `build_exe.bat`. This avoids PR/branch tooling failures like **"Binary files are not supported"** when updating branches.
+
 ## Usage
 
 1. Launch the app.
 2. Paste the text in the large text box.
-3. Tune the sliders for the typing profile you want.
-4. Set start delay (seconds).
-5. Click **Start Typing**.
-6. Quickly focus the target field in another application.
-7. Press **Stop** to cancel.
+3. Set Base WPM using the slider and/or type an exact value in **Manual Base WPM** (manual entry supports uncapped values; slider visual range stays 10–160).
+4. Tune the remaining sliders for the typing profile you want.
+5. Optionally use **View** menu toggles for Dark mode, Advanced mode, and Debug mode.
+6. Set start delay (seconds).
+7. Click **Start Typing**.
+8. Quickly focus the target field in another application.
+9. Press **Stop** to cancel.
 
 ## Safety notes
 
