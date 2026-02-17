@@ -405,6 +405,7 @@ class App:
         self.global_hotkey_listener = None
         self.total_chars = 0
         self.current_theme = "dark"
+        self._last_update_log = None
         self.theme_palettes = {mode: values.copy() for mode, values in DEFAULT_THEME_PALETTES.items()}
         self.theme_color_vars = {key: tk.StringVar(value=self.theme_palettes[self.current_theme][key]) for key, _ in THEME_COLOR_FIELDS}
 
@@ -985,6 +986,14 @@ class App:
         self._refresh_debug_panel()
 
 
+    def _append_update_log(self, kind: str, message: str):
+        normalized = (kind, message.strip())
+        if self._last_update_log == normalized:
+            return
+        self._last_update_log = normalized
+        self.log_box.insert("end", f"[{kind}]\n{message}\n")
+        self.log_box.see("end")
+
     def _resolve_git_repo(self):
         candidates = [Path(__file__).resolve().parent, Path.cwd()]
         exe_path = getattr(sys, "executable", "")
@@ -1012,7 +1021,7 @@ class App:
             if repo_dir is None:
                 msg = "Update unavailable: this copy is not inside a Git repository. Use a cloned repo checkout to update from Git."
                 self._ui(lambda text=msg: self.status.set(text))
-                self._ui(lambda text=msg: self.log_box.insert("end", f"[update-error]\n{text}\n"))
+                self._ui(lambda text=msg: self._append_update_log("update-error", text))
                 return
 
             try:
@@ -1027,15 +1036,15 @@ class App:
                 if result.stderr:
                     out = f"{out}\n{result.stderr.strip()}".strip()
                 self._ui(lambda out_text=out: self.status.set("Update complete. Restart app manually if files changed."))
-                self._ui(lambda out_text=out: self.log_box.insert("end", f"[update]\n{out_text}\n"))
+                self._ui(lambda out_text=out: self._append_update_log("update", out_text))
             except subprocess.CalledProcessError as exc:
                 err_out = "\n".join(part.strip() for part in [exc.stdout or "", exc.stderr or ""] if part.strip())
                 err_msg = err_out or str(exc)
                 self._ui(lambda err=err_msg: self.status.set(f"Update failed: {err}"))
-                self._ui(lambda err=err_msg: self.log_box.insert("end", f"[update-error]\n{err}\n"))
+                self._ui(lambda err=err_msg: self._append_update_log("update-error", err))
             except Exception as exc:
                 self._ui(lambda err=str(exc): self.status.set(f"Update failed: {err}"))
-                self._ui(lambda err=str(exc): self.log_box.insert("end", f"[update-error]\n{err}\n"))
+                self._ui(lambda err=str(exc): self._append_update_log("update-error", err))
 
         threading.Thread(target=worker, daemon=True).start()
 
