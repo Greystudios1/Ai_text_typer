@@ -1,75 +1,76 @@
 # Human-ish Text Typer (Windows GUI)
 
-This project provides a simple desktop GUI that types pasted text into the currently focused input field with configurable timing variability.
+Two GUI apps are included:
 
-> Use this for legitimate automation tasks (demo scripting, accessibility assistance, QA/testing, repetitive data-entry workflows).
+- **Base app**: `human_typer_gui.py` (plain text)
+- **v2 app**: `human_typer_gui_v2.py` (formatted text + safety controls + logging)
 
-## Features
+## v2 major capabilities
 
-- Paste text and send it to any active input field after a countdown.
-- Adjustable typing profile controls:
-  - base WPM
-  - per-keystroke timing variation
-  - burst length (min/max chars)
-  - micro pauses and longer thinking pauses
-  - typo chance and correction chance
-  - warmup effect and fatigue drift
-- Start/Stop controls with status display.
-- `PyInstaller` build script for Windows `.exe` packaging.
-- Automatic Desktop shortcut creation (`HumanTyper.lnk`) after a successful build.
+### Formatted input
+- `**bold**`
+- `*italic*` or `_italic_`
+- Bullets with `- ` or `* `
+- Line breaks
+
+### Safety and control
+- Stop button
+- **Pause/Resume** button
+- Keyboard shortcuts: **F8 start**, **F9 pause/resume**, **F10 stop**
+- Global emergency stop: **Ctrl+Alt+Esc** (when `pynput` is available)
+- “Armed” state with 3-2-1 style countdown before typing
+- Optional active-window guard/title display
+- **Dark mode toggle** (dark/light)
+- **Power user mode** toggle (shows debug panel + event log area)
+
+### Reproducibility + profiles
+- **Use seed** toggle (default ON with standard seed `12345`)
+- Seed field
+- Randomize seed button
+- If Use seed is OFF, each run uses a stochastic auto-seed
+- Seed included in run summary
+- Presets: Careful, Fast, Fatigued, No typos
+- Save/load profile JSON
+
+### Observability
+- Event log toggle
+- Run summary with:
+  - effective WPM
+  - chars typed
+  - typo/correction counts
+  - pause totals
+  - run duration
+- Dry run mode (simulate only, no key output)
+- Progress indicator (`Typed X / Y chars`)
+
+### Robust key output
+v2 includes a translation layer for uppercase and shift-modified symbols (`: ? { }` etc.) and handles newline/tab as named keys.
+
+### In-app update helper
+- **Update from Git** button runs `git pull --ff-only` and reports output in the log panel.
+- Update is non-destructive for debugging: it does **not** auto-close the app/window; restart is manual when desired.
 
 ## Run locally
 
 ```bash
 python -m pip install -r requirements.txt
 python human_typer_gui.py
+python human_typer_gui_v2.py
 ```
 
 ## Build Windows EXE
 
-### Recommended (double-click or run in cmd)
+Use:
 
 ```bat
 build_exe.bat
 ```
 
-The batch file:
+It auto-detects available sources and builds base, v2, or both.
 
-- switches to the script directory automatically (so `requirements.txt` is always found)
-- picks `py -3` when available, otherwise falls back to `python`
-- stops on install/build errors (no false "Build complete" message on failure)
-- creates Desktop shortcut: `%USERPROFILE%\Desktop\HumanTyper.lnk`
-- keeps the command window open with `pause` for debugging on both success and failure
+Before each build, the script now automatically removes old local build media (previous `dist/`, `build/`, `.spec` files), deletes old desktop shortcuts, and attempts to terminate old running `HumanTyper*.exe` processes so stale versions are uninstalled/cleaned up first.
 
-### Manual build
+## Notes
 
-```bat
-python -m pip install -r requirements.txt
-python -m PyInstaller --noconfirm --onefile --windowed --name HumanTyper human_typer_gui.py
-```
-
-Output binary:
-
-- `dist/HumanTyper.exe`
-
-## Usage
-
-1. Launch the app.
-2. Paste the text in the large text box.
-3. Tune the sliders for the typing profile you want.
-4. Set start delay (seconds).
-5. Click **Start Typing**.
-6. Quickly focus the target field in another application.
-7. Press **Stop** to cancel.
-
-## Safety notes
-
-- `PyAutoGUI` fail-safe is enabled: moving mouse to the top-left corner can raise a fail-safe exception.
-- Test in a safe text editor first before using in important applications.
-
-## Troubleshooting (Windows)
-
-- **`Could not open requirements file`**: run `build_exe.bat` from this repository and keep `requirements.txt` in the same folder.
-- **`No module named PyInstaller`**: run `python -m pip install -r requirements.txt` first, then rerun `build_exe.bat`.
-- **Shortcut creation failed**: ensure PowerShell is available and not blocked by local policy.
-- If your machine has multiple Python installs, use explicit versioned commands (example: `py -3.12 -m pip install -r requirements.txt`).
+- `PyAutoGUI` fail-safe is enabled; moving mouse to top-left can trigger fail-safe.
+- Test in a safe editor first.
