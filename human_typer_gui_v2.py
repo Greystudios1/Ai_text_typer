@@ -406,10 +406,13 @@ class App:
 
         seed_frame = ttk.Frame(frm)
         seed_frame.grid(row=14, column=0, columnspan=5, sticky="ew", pady=(10, 0))
+        self.use_seed_var = tk.BooleanVar(value=True)
         self.seed_var = tk.StringVar(value="12345")
         self.preset_var = tk.StringVar(value="Careful")
-        ttk.Label(seed_frame, text="Random seed").pack(side="left")
-        ttk.Entry(seed_frame, width=12, textvariable=self.seed_var).pack(side="left", padx=(6, 8))
+        ttk.Checkbutton(seed_frame, text="Use seed", variable=self.use_seed_var, command=self._on_use_seed_toggle).pack(side="left")
+        ttk.Label(seed_frame, text="Random seed").pack(side="left", padx=(8, 0))
+        self.seed_entry = ttk.Entry(seed_frame, width=12, textvariable=self.seed_var)
+        self.seed_entry.pack(side="left", padx=(6, 8))
         ttk.Button(seed_frame, text="Randomize seed", command=self.randomize_seed).pack(side="left")
         ttk.Label(seed_frame, text="Preset").pack(side="left", padx=(14, 4))
         ttk.Combobox(seed_frame, values=list(PRESETS.keys()), textvariable=self.preset_var, width=12, state="readonly").pack(side="left")
@@ -456,6 +459,7 @@ class App:
 
         self._refresh_text_stats()
         self._refresh_preview()
+        self._on_use_seed_toggle()
         self._poll_active_window_title()
 
     def _bind_hotkeys(self):
@@ -558,8 +562,17 @@ class App:
         if not self.power_user_var.get():
             return
         self.debug_var.set(
-            f"Debug: theme={self.current_theme} | seed={self.seed_var.get()} | dry_run={self.dry_run_var.get()} | event_log={self.log_events_var.get()} | guard_window={self.guard_window_var.get()}"
+            f"Debug: theme={self.current_theme} | use_seed={self.use_seed_var.get()} | seed={self.seed_var.get() or '(auto)'} | dry_run={self.dry_run_var.get()} | event_log={self.log_events_var.get()} | guard_window={self.guard_window_var.get()}"
         )
+
+    def _on_use_seed_toggle(self):
+        if self.use_seed_var.get():
+            if not self.seed_var.get().strip():
+                self.seed_var.set("12345")
+            self.seed_entry.config(state="normal")
+        else:
+            self.seed_entry.config(state="disabled")
+        self._refresh_debug_panel()
 
     def _config_from_ui(self) -> TyperConfig:
         return TyperConfig(
@@ -577,6 +590,8 @@ class App:
 
     def randomize_seed(self):
         self.seed_var.set(str(random.randint(1, 2_000_000_000)))
+        self.use_seed_var.set(True)
+        self.seed_entry.config(state="normal")
         self._refresh_debug_panel()
 
     def apply_preset(self):
@@ -604,6 +619,7 @@ class App:
         data = {
             "typer_config": asdict(self._config_from_ui()),
             "countdown": self.countdown_var.get(),
+            "use_seed": self.use_seed_var.get(),
             "seed": self.seed_var.get(),
             "dry_run": self.dry_run_var.get(),
             "rich_shortcuts": self.rich_shortcuts_var.get(),
@@ -635,7 +651,9 @@ class App:
                     val *= 100
                 self.scale_vars[ui].set(val)
         self.countdown_var.set(int(data.get("countdown", self.countdown_var.get())))
+        self.use_seed_var.set(bool(data.get("use_seed", self.use_seed_var.get())))
         self.seed_var.set(str(data.get("seed", self.seed_var.get())))
+        self._on_use_seed_toggle()
         self.dry_run_var.set(bool(data.get("dry_run", self.dry_run_var.get())))
         self.rich_shortcuts_var.set(bool(data.get("rich_shortcuts", self.rich_shortcuts_var.get())))
         self._refresh_preview()
@@ -652,11 +670,18 @@ class App:
             messagebox.showerror("Invalid config", "Burst max must be >= burst min")
             return
 
-        try:
-            seed = int(self.seed_var.get())
-        except ValueError:
-            messagebox.showerror("Invalid seed", "Seed must be an integer")
-            return
+        if self.use_seed_var.get():
+            seed_text = self.seed_var.get().strip()
+            if not seed_text:
+                seed_text = "12345"
+                self.seed_var.set(seed_text)
+            try:
+                seed = int(seed_text)
+            except ValueError:
+                messagebox.showerror("Invalid seed", "Seed must be an integer")
+                return
+        else:
+            seed = random.SystemRandom().randint(1, 2_147_483_647)
 
         self.total_chars = len(text)
         self.stop_event.clear()
@@ -667,7 +692,8 @@ class App:
 
         self.armed_var.set("ARMED")
         delay = max(0, self.countdown_var.get())
-        self.status.set(f"Armed. Starting in {delay}s...")
+        seed_mode = "fixed" if self.use_seed_var.get() else "stochastic"
+        self.status.set(f"Armed. Starting in {delay}s... ({seed_mode} seed)")
         self._refresh_debug_panel()
 
         self.worker = threading.Thread(

@@ -24,8 +24,10 @@ Two GUI apps are included:
 - **Power user mode** toggle (shows debug panel + event log area)
 
 ### Reproducibility + profiles
+- **Use seed** toggle (default ON with standard seed `12345`)
 - Seed field
 - Randomize seed button
+- If Use seed is OFF, each run uses a stochastic auto-seed
 - Seed included in run summary
 - Presets: Careful, Fast, Fatigued, No typos
 - Save/load profile JSON
