@@ -100,7 +100,8 @@ class HumanTyper:
         if self.stop_event.is_set():
             return
 
-        hold = random.uniform(0.03, 0.11)
+        baseline = self._char_interval()
+        hold = baseline * random.uniform(0.20, 0.65)
         if char.isupper() or char in "~!@#$%^&*()_+{}|:\\<>?":
             hold *= random.uniform(1.1, 1.4)
 
@@ -110,8 +111,7 @@ class HumanTyper:
         self.typed_chars += 1
 
     def _flight_delay(self, prev_char: str, current_char: str):
-        cps = (self.config.base_wpm * 5.0) / 60.0
-        baseline = 1.0 / max(cps, 0.1)
+        baseline = self._char_interval()
 
         if self.typed_chars < self.config.warmup_chars:
             baseline *= 1.25 - 0.35 * (self.typed_chars / max(1, self.config.warmup_chars))
@@ -131,17 +131,24 @@ class HumanTyper:
         time.sleep(delay)
 
     def _boundary_pause(self, char: str):
+        baseline = self._char_interval()
         if char in " ,;":
             if random.random() < self.config.micro_pause_chance:
-                time.sleep(random.uniform(0.08, 0.35))
+                time.sleep(baseline * random.uniform(1.2, 5.0))
         if char in ".!?":
-            time.sleep(random.uniform(0.25, 1.0))
+            time.sleep(baseline * random.uniform(3.5, 14.0))
 
     def _short_delay(self):
-        time.sleep(random.uniform(0.03, 0.12))
+        baseline = self._char_interval()
+        time.sleep(baseline * random.uniform(0.4, 1.8))
 
     def _pause_after_error(self):
-        time.sleep(random.uniform(0.18, 0.7))
+        baseline = self._char_interval()
+        time.sleep(baseline * random.uniform(2.4, 10.0))
+
+    def _char_interval(self) -> float:
+        cps = (self.config.base_wpm * 5.0) / 60.0
+        return 1.0 / max(cps, 0.1)
 
     def _should_enter_hesitation(self, char: str) -> bool:
         if self.recent_error and random.random() < 0.35:
@@ -175,14 +182,46 @@ class App:
         self.root.title("Human-ish Typer (GUI)")
         self.root.geometry("880x620")
 
+        self.dark_mode_var = tk.BooleanVar(value=True)
+        self.advanced_mode_var = tk.BooleanVar(value=False)
+        self.debug_mode_var = tk.BooleanVar(value=False)
+        self.manual_wpm_var = tk.StringVar(value="70")
+        self.slider_base_wpm_var = tk.DoubleVar(value=70)
+        self.debug_var = tk.StringVar(value="Debug mode is off")
+
         self.stop_event = threading.Event()
         self.worker = None
+        self._updating_manual_wpm = False
 
+        self._build_menu()
         self._build_ui()
+        self.apply_theme()
+
+    def _build_menu(self):
+        menubar = tk.Menu(self.root)
+        view_menu = tk.Menu(menubar, tearoff=0)
+        view_menu.add_checkbutton(
+            label="Dark mode",
+            variable=self.dark_mode_var,
+            command=self.apply_theme,
+        )
+        view_menu.add_checkbutton(
+            label="Advanced mode",
+            variable=self.advanced_mode_var,
+            command=self._toggle_advanced_mode,
+        )
+        view_menu.add_checkbutton(
+            label="Debug mode",
+            variable=self.debug_mode_var,
+            command=self._toggle_debug_mode,
+        )
+        menubar.add_cascade(label="View", menu=view_menu)
+        self.root.config(menu=menubar)
 
     def _build_ui(self):
         frm = ttk.Frame(self.root, padding=12)
         frm.pack(fill="both", expand=True)
+        self.main_frame = frm
 
         ttk.Label(frm, text="Text to type").grid(row=0, column=0, sticky="w")
         self.text_input = tk.Text(frm, height=10, wrap="word")
@@ -202,14 +241,41 @@ class App:
         ]
 
         self.scale_vars = {}
+        self.control_widgets = {}
+        advanced_labels = {
+            "Burst min chars",
+            "Burst max chars",
+            "Micro pause chance %",
+            "Think pause chance %",
+            "Typo chance %",
+            "Correction chance %",
+            "Warmup chars",
+            "Fatigue % / 100 chars",
+        }
+        self.advanced_control_labels = advanced_labels
         for i, (label, mn, mx, dv) in enumerate(controls):
             r = 2 + i
-            ttk.Label(frm, text=label).grid(row=r, column=0, sticky="w")
-            var = tk.DoubleVar(value=dv)
+            lbl = ttk.Label(frm, text=label)
+            lbl.grid(row=r, column=0, sticky="w")
+            var = self.slider_base_wpm_var if label == "Base WPM" else tk.DoubleVar(value=dv)
             scl = ttk.Scale(frm, from_=mn, to=mx, variable=var)
             scl.grid(row=r, column=1, sticky="ew", padx=(8, 8))
-            ttk.Label(frm, textvariable=var, width=8).grid(row=r, column=2, sticky="e")
+            val_lbl = ttk.Label(frm, textvariable=var, width=8)
+            val_lbl.grid(row=r, column=2, sticky="e")
             self.scale_vars[label] = var
+            self.control_widgets[label] = (lbl, scl, val_lbl)
+
+        self.scale_vars["Base WPM"].trace_add("write", self._sync_manual_wpm_from_slider)
+
+        ttk.Label(frm, text="Manual Base WPM").grid(row=2, column=3, sticky="w")
+        self.manual_wpm_entry = ttk.Entry(frm, textvariable=self.manual_wpm_var, width=10)
+        self.manual_wpm_entry.grid(row=3, column=3, sticky="nw")
+        self.manual_wpm_entry.bind("<KeyRelease>", self._sync_slider_from_manual_wpm)
+        self.manual_wpm_entry.bind("<FocusOut>", self._validate_manual_wpm_field)
+
+        self.debug_frame = ttk.LabelFrame(frm, text="Debug", padding=8)
+        self.debug_frame.grid(row=12, column=3, rowspan=2, sticky="nsew", padx=(12, 0), pady=(10, 0))
+        ttk.Label(self.debug_frame, textvariable=self.debug_var, wraplength=220, justify="left").pack(anchor="w")
 
         self.countdown_var = tk.IntVar(value=4)
         ttk.Label(frm, text="Start delay (seconds)").grid(row=12, column=0, sticky="w", pady=(10, 0))
@@ -229,10 +295,114 @@ class App:
 
         frm.columnconfigure(1, weight=1)
         frm.rowconfigure(1, weight=1)
+        frm.columnconfigure(3, weight=0)
+
+        self._toggle_advanced_mode()
+        self._toggle_debug_mode()
+
+    def apply_theme(self):
+        style = ttk.Style(self.root)
+        if self.dark_mode_var.get():
+            bg = "#1e1e1e"
+            fg = "#f2f2f2"
+            entry_bg = "#2a2a2a"
+            text_bg = "#181818"
+            text_fg = "#f1f1f1"
+        else:
+            bg = "#f2f2f2"
+            fg = "#202020"
+            entry_bg = "#ffffff"
+            text_bg = "#ffffff"
+            text_fg = "#202020"
+
+        self.root.configure(bg=bg)
+        style.configure("TFrame", background=bg)
+        style.configure("TLabelframe", background=bg, foreground=fg)
+        style.configure("TLabelframe.Label", background=bg, foreground=fg)
+        style.configure("TLabel", background=bg, foreground=fg)
+        style.configure("TButton", padding=5)
+        style.configure("TEntry", fieldbackground=entry_bg, foreground=fg)
+        style.configure("TSpinbox", fieldbackground=entry_bg, foreground=fg)
+        self.text_input.configure(bg=text_bg, fg=text_fg, insertbackground=text_fg)
+
+    def _toggle_advanced_mode(self):
+        if self.advanced_mode_var.get():
+            for label in self.advanced_control_labels:
+                for widget in self.control_widgets[label]:
+                    widget.grid()
+        else:
+            for label in self.advanced_control_labels:
+                for widget in self.control_widgets[label]:
+                    widget.grid_remove()
+
+    def _toggle_debug_mode(self):
+        if self.debug_mode_var.get():
+            self.debug_frame.grid()
+            self._update_debug("Debug mode enabled")
+        else:
+            self.debug_frame.grid_remove()
+
+    def _update_debug(self, msg: str):
+        if not self.debug_mode_var.get():
+            return
+
+        def _set_msg():
+            self.debug_var.set(msg)
+
+        self.root.after(0, _set_msg)
+
+    def _sync_manual_wpm_from_slider(self, *_):
+        if self._updating_manual_wpm:
+            return
+        self._updating_manual_wpm = True
+        try:
+            self.manual_wpm_var.set(f"{self.slider_base_wpm_var.get():.2f}".rstrip("0").rstrip("."))
+        finally:
+            self._updating_manual_wpm = False
+
+    def _sync_slider_from_manual_wpm(self, _event=None):
+        if self._updating_manual_wpm:
+            return
+        raw = self.manual_wpm_var.get().strip()
+        if not raw:
+            return
+        try:
+            val = float(raw)
+        except ValueError:
+            return
+
+        self._updating_manual_wpm = True
+        try:
+            self.slider_base_wpm_var.set(min(160, max(10, val)))
+        finally:
+            self._updating_manual_wpm = False
+
+    def _validate_manual_wpm_field(self, _event=None):
+        raw = self.manual_wpm_var.get().strip()
+        if not raw:
+            return
+        try:
+            val = float(raw)
+        except ValueError:
+            messagebox.showerror("Invalid WPM", "Manual Base WPM must be a valid number.")
+            self.manual_wpm_var.set(f"{self.slider_base_wpm_var.get():.2f}".rstrip("0").rstrip("."))
+            return
+
+        if val <= 0:
+            messagebox.showerror("Invalid WPM", "Manual Base WPM must be greater than zero.")
+            self.manual_wpm_var.set(f"{self.slider_base_wpm_var.get():.2f}".rstrip("0").rstrip("."))
 
     def _config_from_ui(self) -> TyperConfig:
+        manual_wpm = self.manual_wpm_var.get().strip()
+        try:
+            base_wpm = float(manual_wpm)
+        except ValueError as exc:
+            raise ValueError("Manual Base WPM must be a valid number") from exc
+        if base_wpm <= 0:
+            raise ValueError("Manual Base WPM must be greater than zero")
+
         return TyperConfig(
-            base_wpm=self.scale_vars["Base WPM"].get(),
+            base_wpm=base_wpm,
             variation_pct=self.scale_vars["Variation %"].get(),
             burst_min=int(self.scale_vars["Burst min chars"].get()),
             burst_max=int(self.scale_vars["Burst max chars"].get()),
@@ -250,10 +420,19 @@ class App:
             messagebox.showwarning("No text", "Paste or type text first.")
             return
 
-        cfg = self._config_from_ui()
+        try:
+            cfg = self._config_from_ui()
+        except ValueError as exc:
+            messagebox.showerror("Invalid config", str(exc))
+            return
+
         if cfg.burst_max < cfg.burst_min:
             messagebox.showerror("Invalid config", "Burst max must be >= burst min")
             return
+
+        self._update_debug(
+            f"Base WPM={cfg.base_wpm:.2f} | Slider={self.slider_base_wpm_var.get():.2f} | Variation={cfg.variation_pct:.1f}%"
+        )
 
         self.stop_event.clear()
         self.start_btn.config(state="disabled")
@@ -271,6 +450,7 @@ class App:
             self._finish("Stopped")
             return
         self.status.set("Typing...")
+        self._update_debug(f"Typing started with char interval ~{60.0 / (cfg.base_wpm * 5.0):.3f}s")
 
         typer = HumanTyper(cfg, self.stop_event)
         try:
