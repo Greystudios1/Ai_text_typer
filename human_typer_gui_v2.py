@@ -472,52 +472,106 @@ class App:
 
     def _apply_theme(self, mode: str):
         style = ttk.Style(self.root)
+        if "clam" in style.theme_names() and style.theme_use() != "clam":
+            style.theme_use("clam")
+
         if mode == "dark":
             bg = "#1e1e1e"
             fg = "#f2f2f2"
             panel = "#2a2a2a"
             entry_bg = "#151515"
             entry_fg = "#ffffff"
+            border = "#3a3a3a"
+            button_bg = "#343434"
+            button_active_bg = "#3f3f3f"
+            button_disabled_bg = "#2b2b2b"
             disabled_fg = "#cfcfcf"
-            disabled_btn_fg = "#7a7a7a"
+            disabled_btn_fg = "#9a9a9a"
         else:
             bg = "#f2f2f2"
             fg = "#111111"
             panel = "#ffffff"
             entry_bg = "#ffffff"
             entry_fg = "#111111"
+            border = "#bcbcbc"
+            button_bg = "#ffffff"
+            button_active_bg = "#f4f4f4"
+            button_disabled_bg = "#ececec"
             disabled_fg = "#666666"
-            disabled_btn_fg = "#666666"
+            disabled_btn_fg = "#7a7a7a"
 
         self.root.configure(bg=bg)
         style.configure("TFrame", background=bg)
         style.configure("TLabel", background=bg, foreground=fg)
         style.configure("TCheckbutton", background=bg, foreground=fg)
-        style.configure("TButton", background=panel, foreground=fg, borderwidth=1)
 
-        style.configure("Readable.TEntry", fieldbackground=entry_bg, foreground=entry_fg)
-        style.map("Readable.TEntry", foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)])
-
-        style.configure("Readable.TCombobox", fieldbackground=entry_bg, foreground=entry_fg, background=panel)
-        style.map(
-            "Readable.TCombobox",
-            fieldbackground=[("readonly", entry_bg), ("!readonly", entry_bg)],
-            foreground=[("readonly", entry_fg), ("disabled", disabled_fg), ("!disabled", entry_fg)],
-            selectforeground=[("readonly", entry_fg)],
+        style.configure(
+            "TButton",
+            background=button_bg,
+            foreground=fg,
+            bordercolor=border,
+            darkcolor=button_bg,
+            lightcolor=button_bg,
+            relief="flat",
+            borderwidth=1,
+            focusthickness=1,
+            focuscolor=border,
+            padding=(8, 4),
         )
 
-        style.configure("Readable.TSpinbox", fieldbackground=entry_bg, foreground=entry_fg)
-        style.map("Readable.TSpinbox", foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)])
+        style.configure(
+            "Readable.TEntry",
+            fieldbackground=entry_bg,
+            foreground=entry_fg,
+            bordercolor=border,
+            insertcolor=entry_fg,
+        )
+        style.map(
+            "Readable.TEntry",
+            foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)],
+            fieldbackground=[("disabled", panel), ("!disabled", entry_bg)],
+        )
+
+        style.configure(
+            "Readable.TCombobox",
+            fieldbackground=entry_bg,
+            foreground=entry_fg,
+            background=panel,
+            bordercolor=border,
+            arrowcolor=entry_fg,
+        )
+        style.map(
+            "Readable.TCombobox",
+            fieldbackground=[("readonly", entry_bg), ("disabled", panel), ("!readonly", entry_bg)],
+            foreground=[("readonly", entry_fg), ("disabled", disabled_fg), ("!disabled", entry_fg)],
+            selectforeground=[("readonly", entry_fg)],
+            arrowcolor=[("disabled", disabled_fg), ("!disabled", entry_fg)],
+        )
+
+        style.configure(
+            "Readable.TSpinbox",
+            fieldbackground=entry_bg,
+            foreground=entry_fg,
+            background=panel,
+            bordercolor=border,
+            arrowcolor=entry_fg,
+        )
+        style.map(
+            "Readable.TSpinbox",
+            foreground=[("disabled", disabled_fg), ("!disabled", entry_fg)],
+            fieldbackground=[("disabled", panel), ("!disabled", entry_bg)],
+            arrowcolor=[("disabled", disabled_fg), ("!disabled", entry_fg)],
+        )
 
         scale_trough = "#2f2f2f" if mode == "dark" else "#d9d9d9"
-        scale_bg = bg
-        style.configure("Themed.Horizontal.TScale", background=scale_bg, troughcolor=scale_trough)
-        style.map("Themed.Horizontal.TScale", background=[("active", scale_bg)])
+        style.configure("Themed.Horizontal.TScale", background=bg, troughcolor=scale_trough)
+        style.map("Themed.Horizontal.TScale", background=[("active", bg)])
 
         style.map(
             "TButton",
-            background=[("active", panel), ("disabled", panel)],
+            background=[("active", button_active_bg), ("disabled", button_disabled_bg), ("!disabled", button_bg)],
             foreground=[("disabled", disabled_btn_fg), ("!disabled", fg)],
+            bordercolor=[("disabled", border), ("!disabled", border)],
         )
 
         self.seed_entry.configure(style="Readable.TEntry")
