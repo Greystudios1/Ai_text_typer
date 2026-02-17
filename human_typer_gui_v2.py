@@ -831,13 +831,28 @@ class App:
 
     def update_from_git(self):
         def worker():
+            repo_dir = Path(__file__).resolve().parent
             try:
-                out = subprocess.check_output(["git", "pull", "--ff-only"], stderr=subprocess.STDOUT, text=True)
+                result = subprocess.run(
+                    ["git", "pull", "--ff-only"],
+                    cwd=repo_dir,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                out = (result.stdout or "").strip()
+                if result.stderr:
+                    out = f"{out}\n{result.stderr.strip()}".strip()
                 self._ui(lambda out_text=out: self.status.set("Update complete. Restart app manually if files changed."))
                 self._ui(lambda out_text=out: self.log_box.insert("end", f"[update]\n{out_text}\n"))
+            except subprocess.CalledProcessError as exc:
+                err_out = "\n".join(part.strip() for part in [exc.stdout or "", exc.stderr or ""] if part.strip())
+                err_msg = err_out or str(exc)
+                self._ui(lambda err=err_msg: self.status.set(f"Update failed: {err}"))
+                self._ui(lambda err=err_msg: self.log_box.insert("end", f"[update-error]\n{err}\n"))
             except Exception as exc:
                 self._ui(lambda err=str(exc): self.status.set(f"Update failed: {err}"))
-                self._ui(lambda err=str(exc): self.log_box.insert("end", f"[update-error] {err}\n"))
+                self._ui(lambda err=str(exc): self.log_box.insert("end", f"[update-error]\n{err}\n"))
 
         threading.Thread(target=worker, daemon=True).start()
 
