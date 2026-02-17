@@ -1,6 +1,7 @@
 import json
 import random
 import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
@@ -829,9 +830,37 @@ class App:
         self.status.set("Stopping...")
         self._refresh_debug_panel()
 
+
+    def _resolve_git_repo(self):
+        candidates = [Path(__file__).resolve().parent, Path.cwd()]
+        exe_path = getattr(sys, "executable", "")
+        if exe_path:
+            candidates.append(Path(exe_path).resolve().parent)
+
+        seen = set()
+        for candidate in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            probe = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=candidate,
+                capture_output=True,
+                text=True,
+            )
+            if probe.returncode == 0:
+                return Path(probe.stdout.strip())
+        return None
+
     def update_from_git(self):
         def worker():
-            repo_dir = Path(__file__).resolve().parent
+            repo_dir = self._resolve_git_repo()
+            if repo_dir is None:
+                msg = "Update unavailable: this copy is not inside a Git repository. Use a cloned repo checkout to update from Git."
+                self._ui(lambda text=msg: self.status.set(text))
+                self._ui(lambda text=msg: self.log_box.insert("end", f"[update-error]\n{text}\n"))
+                return
+
             try:
                 result = subprocess.run(
                     ["git", "pull", "--ff-only"],
