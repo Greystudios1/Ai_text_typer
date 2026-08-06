@@ -1,0 +1,155 @@
+name: Build Timekeeper Pause Hotfix
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-hotfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out build branch
+        uses: actions/checkout@v4
+
+      - name: Download original Timekeeper artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/8954124474/zip" \
+            -o original-artifact.zip
+          mkdir original
+          unzip -q original-artifact.zip -d original
+          test -f original/Timekeeper-2.1.0.apk
+
+      - name: Patch pause accounting and backup import
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p patch/assets build
+          cp original/Timekeeper-2.1.0.apk build/Timekeeper-2.1.1-unsigned.apk
+          unzip -p build/Timekeeper-2.1.1-unsigned.apk assets/index.html > patch/assets/index.html
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('patch/assets/index.html')
+          s=p.read_text()
+          s=s.replace("const ACTIVE_TIMER_ID = 'active-timer';", "const ACTIVE_TIMER_ID = 'active-timer';\nconst MOBILE_BUILD = '2.1.1-pause-hotfix';")
+          old="function addTimeEntry(entry){ state.timeEntries.push(entry); queueMutation('timeEntries',entry,'upsert'); }"
+          new="""function addTimeEntry(entry){
+            state.timeEntries=state.timeEntries.filter(existing=>existing.id!==entry.id);
+            state.timeEntries.push(entry);
+            queueMutation('timeEntries',entry,'upsert');
+          }"""
+          assert old in s
+          s=s.replace(old,new)
+          old="""function actualMinutes(item,key){
+            const entries=state.timeEntries.filter(e=> item.kind==='task'?e.taskId===item.record.id:(e.planId===item.record.id&&e.occurrenceDate===key));
+            let total=entries.reduce((sum,e)=>sum+entryMinutes(e),0);
+            const t=state.timer;
+            if(t&&['running','paused'].includes(t.status)){
+              const match=item.kind==='task'?t.taskId===item.record.id:(t.planId===item.record.id&&t.occurrenceDate===key);
+              if(match){ total+=Number(t.elapsedMilliseconds||0)/60000; if(t.status==='running'&&t.startedAt)total+=(Date.now()-new Date(t.startedAt))/60000; }
+            }
+            return total;
+          }"""
+          new="""function actualMinutes(item,key){
+            const entries=state.timeEntries.filter(e=> item.kind==='task'?e.taskId===item.record.id:(e.planId===item.record.id&&e.occurrenceDate===key));
+            let total=entries.reduce((sum,e)=>sum+entryMinutes(e),0);
+            const t=state.timer;
+            if(t&&t.status==='running'&&t.startedAt){
+              const match=item.kind==='task'?t.taskId===item.record.id:(t.planId===item.record.id&&t.occurrenceDate===key);
+              if(match)total+=Math.max(0,Date.now()-new Date(t.startedAt))/60000;
+            }
+            return total;
+          }"""
+          assert old in s
+          s=s.replace(old,new)
+          s=s.replace('<button class="secondary" id="export-data">Export backup</button>\n            <button class="danger" id="reset-data">Reset app</button>', '<button class="secondary" id="export-data">Export backup</button>\n            <button class="secondary" id="import-data">Import backup</button>\n            <button class="danger" id="reset-data">Reset app</button>')
+          s=s.replace('Export opens a text backup that can be copied. Reset deletes local app data and reinstalls the starter schedule.', 'Export opens a text backup that can be copied. Import restores a pasted backup after reinstalling. Reset deletes local app data and reinstalls the starter schedule.')
+          s=s.replace('<div class="modal-head"><div><h2>Backup</h2><p>Copy this JSON somewhere safe.</p></div><button class="modal-close" data-close="backup-modal">×</button></div>\n  <textarea id="backup-text" style="min-height:55vh;font-family:ui-monospace,monospace;font-size:.72rem"></textarea>\n</div></div>', '<div class="modal-head"><div><h2 id="backup-title">Backup</h2><p id="backup-help">Copy this JSON somewhere safe.</p></div><button class="modal-close" data-close="backup-modal">×</button></div>\n  <textarea id="backup-text" style="min-height:55vh;font-family:ui-monospace,monospace;font-size:.72rem"></textarea>\n  <div class="form-actions"><button type="button" class="ghost" data-close="backup-modal">Close</button><button type="button" class="primary hidden" id="restore-backup">Restore backup</button></div>\n</div></div>')
+          needle="function saveSettings(){state.settings.syncUrl=document.getElementById('sync-url').value.trim();state.settings.syncKey=document.getElementById('sync-key').value.trim();saveState({notify:false});renderSettings();toast('Settings saved.');}"
+          helpers="""function openExportBackup(){
+            document.getElementById('backup-title').textContent='Backup';
+            document.getElementById('backup-help').textContent='Copy this JSON somewhere safe.';
+            document.getElementById('backup-text').value=JSON.stringify({format:'timekeeper-mobile-backup',schemaVersion:1,exportedAt:nowIso(),...state},null,2);
+            document.getElementById('restore-backup').classList.add('hidden');openModal('backup-modal');
+          }
+          function openImportBackup(){
+            document.getElementById('backup-title').textContent='Import backup';
+            document.getElementById('backup-help').textContent='Paste a Timekeeper mobile backup below. This replaces the current local data.';
+            document.getElementById('backup-text').value='';document.getElementById('restore-backup').classList.remove('hidden');openModal('backup-modal');
+          }
+          function restoreBackup(){
+            let parsed;try{parsed=JSON.parse(document.getElementById('backup-text').value.trim());}catch(e){toast('That is not valid backup JSON.');return;}
+            if(!parsed||parsed.format!=='timekeeper-mobile-backup'||!Array.isArray(parsed.events)||!Array.isArray(parsed.tasks)||!Array.isArray(parsed.timeEntries)){toast('That is not a Timekeeper mobile backup.');return;}
+            if(!confirm('Replace all local Timekeeper data with this backup?'))return;
+            const baseline=freshState();const uniqueEntries=[...new Map(parsed.timeEntries.filter(Boolean).map(entry=>[entry.id,entry])).values()];
+            state={...baseline,...parsed,schemaVersion:1,deviceId:parsed.deviceId||baseline.deviceId,events:parsed.events,tasks:parsed.tasks,timeEntries:uniqueEntries,outbox:parsed.outbox||[],cursor:Number(parsed.cursor||0),settings:{...baseline.settings,...(parsed.settings||{})}};
+            saveState();selectedDate=dateKey(new Date());closeModal('backup-modal');render();toast('Backup restored.');
+          }
+          """
+          assert needle in s
+          s=s.replace(needle,helpers+needle)
+          old="document.getElementById('export-data').onclick=()=>{document.getElementById('backup-text').value=JSON.stringify({format:'timekeeper-mobile-backup',schemaVersion:1,exportedAt:nowIso(),...state},null,2);openModal('backup-modal');};"
+          new="document.getElementById('export-data').onclick=openExportBackup;document.getElementById('import-data').onclick=openImportBackup;document.getElementById('restore-backup').onclick=restoreBackup;"
+          assert old in s
+          s=s.replace(old,new)
+          assert "total+=Number(t.elapsedMilliseconds" not in s[s.index('function actualMinutes'):s.index('function proposedMinutes')]
+          assert 'id="import-data"' in s
+          p.write_text(s)
+          PY
+          (cd patch && zip -q -u ../build/Timekeeper-2.1.1-unsigned.apk assets/index.html)
+          zip -q -d build/Timekeeper-2.1.1-unsigned.apk 'META-INF/*' || true
+          unzip -t build/Timekeeper-2.1.1-unsigned.apk
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s=Path('patch/assets/index.html').read_text()
+          m=re.search(r'<script>\s*(.*?)\s*</script>',s,re.S)
+          assert m
+          Path('build/mobile.js').write_text(m.group(1))
+          PY
+          node --check build/mobile.js
+
+      - name: Sign and verify hotfix APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          BUILD_TOOLS="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          keytool -genkeypair -noprompt -keystore build/timekeeper-update.keystore -storepass timekeeper -keypass timekeeper -alias timekeeper -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=Timekeeper Update Key, OU=Personal App, O=Grey Studios, L=Bristol, ST=Virginia, C=US"
+          "$BUILD_TOOLS/zipalign" -f 4 build/Timekeeper-2.1.1-unsigned.apk build/Timekeeper-2.1.1-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign --ks build/timekeeper-update.keystore --ks-pass pass:timekeeper --key-pass pass:timekeeper --out build/Timekeeper-2.1.1-pause-hotfix.apk build/Timekeeper-2.1.1-aligned.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs build/Timekeeper-2.1.1-pause-hotfix.apk | tee build/signature-verification.txt
+          unzip -t build/Timekeeper-2.1.1-pause-hotfix.apk
+          unzip -p build/Timekeeper-2.1.1-pause-hotfix.apk assets/index.html | grep -q "2.1.1-pause-hotfix"
+          sha256sum build/Timekeeper-2.1.1-pause-hotfix.apk | tee build/Timekeeper-2.1.1-pause-hotfix.apk.sha256
+          cp "$BUILD_TOOLS/lib/apksigner.jar" build/apksigner.jar
+          cp "$BUILD_TOOLS/zipalign" build/zipalign
+          printf '%s\n' 'Keystore alias: timekeeper' 'Keystore password: timekeeper' 'Key password: timekeeper' > build/signing-key-info.txt
+
+      - name: Upload hotfix and update key
+        uses: actions/upload-artifact@v4
+        with:
+          name: Timekeeper-2.1.1-Pause-Hotfix
+          path: |
+            build/Timekeeper-2.1.1-pause-hotfix.apk
+            build/Timekeeper-2.1.1-pause-hotfix.apk.sha256
+            build/signature-verification.txt
+            build/timekeeper-update.keystore
+            build/signing-key-info.txt
+            build/apksigner.jar
+            build/zipalign
+          if-no-files-found: error
+          retention-days: 7
